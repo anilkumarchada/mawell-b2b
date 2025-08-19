@@ -5,8 +5,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // API Configuration
 const API_BASE_URL = __DEV__ 
-  ? 'http://localhost:3001/api' // Development
-  : 'https://api.mawell.com/api'; // Production
+  ? 'http://192.168.1.25:3001/api/v1' // Development - Replace with your PC IP
+  : 'https://api.mawell.com/api/v1'; // Production
 
 const API_TIMEOUT = 30000; // 30 seconds
 
