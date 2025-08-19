@@ -1,0 +1,552 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  BUYER   @map("BUYER")
+  DRIVER  @map("DRIVER")
+  OPS     @map("OPS")
+  ADMIN   @map("ADMIN")
+}
+
+enum KYCStatus {
+  PENDING   @map("PENDING")
+  APPROVED  @map("APPROVED")
+  REJECTED  @map("REJECTED")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  NET_BANKING
+  COD
+}
+
+enum ConsignmentStatus {
+  PENDING
+  ASSIGNED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum Language {
+  EN @map("EN")
+  TE @map("TE")
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+}
+
+model User {
+  id              String    @id @default(cuid())
+  phone           String    @unique
+  name            String
+  email           String?
+  role            UserRole
+  isActive        Boolean   @default(true)
+  isPhoneVerified Boolean   @default(false)
+  language        Language  @default(EN)
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  buyerProfile     BuyerProfile?
+  driverProfile    DriverProfile?
+  addresses        Address[]
+  orders           Order[]
+  consignments     Consignment[]
+  auditLogs        AuditLog[]
+  otpAttempts      OTPAttempt[]
+  warehouseOpsUser WarehouseOpsUser[]
+
+  @@map("users")
+}
+
+model BuyerProfile {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  shopName           String
+  gstin              String?
+  businessType       String?
+  kycStatus          KYCStatus @default(PENDING)
+  kycDocumentUrl     String?
+  kycRejectionReason String?
+  creditLimit        Float?    @default(0)
+  creditUsed         Float?    @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Relations
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cartItems CartItem[]
+
+  @@map("buyer_profiles")
+}
+
+model DriverProfile {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  vehicleNumber      String
+  licenseNumber      String
+  licenseDocumentUrl String?
+  kycStatus          KYCStatus @default(PENDING)
+  isAvailable        Boolean   @default(true)
+  currentLatitude    Float?
+  currentLongitude   Float?
+  locationUpdatedAt  DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("driver_profiles")
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  userId    String
+  line1     String
+  line2     String?
+  city      String
+  state     String
+  pincode   String
+  latitude  Float?
+  longitude Float?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ordersAsDelivery       Order[]       @relation("DeliveryAddress")
+  consignmentsAsPickup   Consignment[] @relation("PickupAddress")
+  consignmentsAsDelivery Consignment[] @relation("DeliveryAddress")
+
+  @@map("addresses")
+}
+
+model Warehouse {
+  id            String   @id @default(cuid())
+  name          String
+  code          String   @unique
+  address       String
+  city          String
+  state         String
+  pincode       String
+  latitude      Float?
+  longitude     Float?
+  contactPerson String
+  contactPhone  String
+  contactEmail  String?
+  capacity      Float?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  inventory        Inventory[]
+  consignments     Consignment[]
+  warehouseOpsUser WarehouseOpsUser[]
+  orderItems       OrderItem[]
+  cartItems        CartItem[]
+
+  @@map("warehouses")
+}
+
+model WarehouseOpsUser {
+  id          String   @id @default(cuid())
+  warehouseId String
+  opsUserId   String
+  assignedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  opsUser   User      @relation(fields: [opsUserId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, opsUserId])
+  @@map("warehouse_ops_users")
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  imageUrl    String?
+  parentId    String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@map("categories")
+}
+
+model Brand {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  logoUrl   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  products Product[]
+
+  @@map("brands")
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  name           String
+  description    String
+  sku            String        @unique
+  categoryId     String
+  brandId        String?
+  hsnCode        String
+  taxRate        Float
+  price          Float
+  mrp            Float
+  images         String[]
+  specifications Json?
+  status         ProductStatus @default(DRAFT)
+  isActive       Boolean       @default(true)
+  moq            Int           @default(1)
+  returnPolicy   String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Relations
+  category   Category    @relation(fields: [categoryId], references: [id])
+  brand      Brand?      @relation(fields: [brandId], references: [id])
+  inventory  Inventory[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@map("products")
+}
+
+model Inventory {
+  id               String   @id @default(cuid())
+  warehouseId      String
+  productId        String
+  quantity         Int      @default(0)
+  reservedQuantity Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  product   Product   @relation(fields: [productId], references: [id])
+
+  @@unique([warehouseId, productId])
+  @@map("inventory")
+}
+
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  items CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id             String   @id @default(cuid())
+  cartId         String
+  productId      String
+  warehouseId    String
+  buyerProfileId String
+  quantity       Int
+  price          Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  cart         Cart         @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id])
+  warehouse    Warehouse    @relation(fields: [warehouseId], references: [id])
+  buyerProfile BuyerProfile @relation(fields: [buyerProfileId], references: [id])
+
+  @@unique([cartId, productId])
+  @@map("cart_items")
+}
+
+model Order {
+  id                  String        @id @default(cuid())
+  orderNumber         String        @unique
+  buyerId             String
+  status              OrderStatus   @default(PENDING)
+  paymentStatus       PaymentStatus @default(PENDING)
+  paymentMethod       PaymentMethod
+  subtotal            Float
+  taxAmount           Float
+  deliveryFee         Float
+  discountAmount      Float         @default(0)
+  totalAmount         Float
+  deliveryAddressId   String
+  estimatedDeliveryAt DateTime?
+  deliveredAt         DateTime?
+  razorpayOrderId     String?
+  razorpayPaymentId   String?
+  paymentReference    String?
+  paymentDate         DateTime?
+  couponCode          String?
+  notes               String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  // Relations
+  buyer           User          @relation(fields: [buyerId], references: [id])
+  deliveryAddress Address       @relation("DeliveryAddress", fields: [deliveryAddressId], references: [id])
+  items           OrderItem[]
+  consignments    Consignment[]
+  invoice         Invoice?
+  payments        Payment[]
+
+  @@map("orders")
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  orderId           String
+  amount            Float
+  currency          String        @default("INR")
+  status            PaymentStatus @default(PENDING)
+  paymentMethod     PaymentMethod
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  razorpaySignature String?
+  failureReason     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String
+  warehouseId String
+  quantity    Int
+  price       Float
+  totalPrice  Float
+  taxAmount   Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@map("order_items")
+}
+
+model Consignment {
+  id                    String            @id @default(cuid())
+  consignmentNumber     String            @unique
+  orderId               String
+  warehouseId           String
+  driverId              String?
+  status                ConsignmentStatus @default(PENDING)
+  pickupAddressId       String
+  deliveryAddressId     String
+  estimatedDeliveryDate DateTime?
+  assignedAt            DateTime?
+  pickedAt              DateTime?
+  deliveredAt           DateTime?
+  failureReason         String?
+  podImageUrl           String?
+  signatureUrl          String?
+  codAmount             Float?
+  codCollected          Boolean           @default(false)
+  notes                 String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  // Relations
+  order           Order              @relation(fields: [orderId], references: [id])
+  warehouse       Warehouse          @relation(fields: [warehouseId], references: [id])
+  driver          User?              @relation(fields: [driverId], references: [id])
+  pickupAddress   Address            @relation("PickupAddress", fields: [pickupAddressId], references: [id])
+  deliveryAddress Address            @relation("DeliveryAddress", fields: [deliveryAddressId], references: [id])
+  events          ConsignmentEvent[]
+
+  @@map("consignments")
+}
+
+model ConsignmentEvent {
+  id            String            @id @default(cuid())
+  consignmentId String
+  status        ConsignmentStatus
+  notes         String?
+  latitude      Float?
+  longitude     Float?
+  timestamp     DateTime          @default(now())
+  createdAt     DateTime          @default(now())
+
+  // Relations
+  consignment Consignment @relation(fields: [consignmentId], references: [id], onDelete: Cascade)
+
+  @@map("consignment_events")
+}
+
+model Coupon {
+  id                String   @id @default(cuid())
+  code              String   @unique
+  description       String
+  discountType      String // PERCENTAGE, FIXED
+  discountValue     Float
+  minOrderAmount    Float?
+  maxDiscountAmount Float?
+  usageLimit        Int?
+  usedCount         Int      @default(0)
+  validFrom         DateTime
+  validUntil        DateTime
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("coupons")
+}
+
+model ServiceArea {
+  id          String   @id @default(cuid())
+  pincode     String   @unique
+  city        String
+  state       String
+  isActive    Boolean  @default(true)
+  deliveryFee Float
+  etaHours    Int      @default(24)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("service_areas")
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  orderId       String   @unique
+  invoiceNumber String   @unique
+  pdfUrl        String?
+  generatedAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@map("invoices")
+}
+
+model CODLedger {
+  id            String    @id @default(cuid())
+  consignmentId String
+  driverId      String
+  amount        Float
+  collectedAt   DateTime
+  settledAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("cod_ledgers")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  userRole   String?
+  action     String
+  resource   String
+  resourceId String
+  oldValues  Json?
+  newValues  Json?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model OTPAttempt {
+  id        String   @id @default(cuid())
+  userId    String?
+  phone     String
+  otp       String
+  hashedOtp String
+  purpose   String   @default("LOGIN")
+  attempts  Int      @default(0)
+  verified  Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("otp_attempts")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String?
+  title     String
+  body      String
+  data      Json?
+  read      Boolean  @default(false)
+  sentAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}

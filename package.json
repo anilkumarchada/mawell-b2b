@@ -1,0 +1,38 @@
+{
+  "name": "mawell-b2b",
+  "version": "1.0.0",
+  "description": "B2B Mobile App with Role-based UI and Admin Portal",
+  "private": true,
+  "workspaces": [
+    "packages/mobile",
+    "packages/admin",
+    "packages/backend",
+    "packages/shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:admin\"",
+    "dev:mobile": "npm run start --workspace=packages/mobile",
+    "dev:admin": "npm run dev --workspace=packages/admin",
+    "dev:backend": "npm run start:dev --workspace=packages/backend",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "migrate": "npm run migrate --workspace=packages/backend",
+    "seed": "npm run seed --workspace=packages/backend",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "setup": "npm install && npm run docker:up && npm run migrate && npm run seed"
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.45.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.1.6"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
